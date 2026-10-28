@@ -2,191 +2,131 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>Özel Sohbet - Katmanlı Mimari</title>
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Proje</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; background: #f4f4f9; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        input, button { padding: 12px; margin: 8px 0; width: 100%; box-sizing: border-box; font-size: 16px; border-radius: 6px; border: 1px solid #ccc; }
+        button { background: #007bff; color: white; border: none; cursor: pointer; font-weight: bold; }
+        button:hover { background: #0056b3; }
+        .hidden { display: none; }
+        #chatBox { height: 200px; border: 1px solid #ddd; overflow-y: scroll; padding: 10px; margin-bottom: 10px; background: #fafafa; border-radius: 6px; }
+    </style>
 </head>
-<body style="background: #f0f2f5; margin: 0;">
-    <div id="root"></div>
+<body>
 
-    <script type="text/babel">
-        // ==========================================
-        // 1. MODEL KATMANI (API İstekleri / Veri)
-        // ==========================================
-        const ChatModel = {
-            login: async (username) => {
-                const res = await fetch('http://127.0.0.1:3000/api/user/login', {
+    <!-- Giriş Ekranı -->
+    <div id="loginSection" class="card">
+        <h2>Sohbet Giriş</h2>
+        <input type="text" id="usernameInput" placeholder="Kullanıcı Adı (max 10 karakter)">
+        <button onclick="login()">Giriş Yap</button>
+    </div>
+
+    <!-- Sohbet Ekranı -->
+    <div id="chatSection" class="card hidden">
+        <h2>Sohbet Odası</h2>
+        <p>Kullanıcı: <b id="currentUserLabel"></b></p>
+        <input type="text" id="targetUserInput" placeholder="Mesajlaşılacak Kişi">
+        <div id="chatBox"><i>Henüz mesaj yok...</i></div>
+        <input type="text" id="messageInput" placeholder="Mesaj yaz (max 50 karakter)">
+        <button onclick="sendMessage()">Gönder</button>
+        <button onclick="logout()" style="background: #dc3545; margin-top: 10px;">Çıkış Yap</button>
+    </div>
+
+    <script>
+        let currentUser = '';
+
+        async function login() {
+            const username = document.getElementById('usernameInput').value.trim();
+            if (!username) {
+                alert('Lütfen kullanıcı adı girin!');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/user/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username })
                 });
-                return await res.json();
-            },
-            logout: async (username) => {
-                const res = await fetch('http://127.0.0.1:3000/api/user/logout', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username })
-                });
-                return await res.json();
-            },
-            fetchMessages: async (roomId) => {
-                const res = await fetch(`http://127.0.0.1:3000/api/chat/${roomId}`);
-                return await res.json();
-            },
-            sendMessage: async (sender, targetUser, text) => {
-                const res = await fetch('http://127.0.0.1:3000/api/chat/send', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ sender, targetUser, text })
-                });
-                return await res.json();
+                const data = await res.json();
+                
+                if (res.ok) {
+                    currentUser = data.user;
+                    document.getElementById('currentUserLabelinnerText' || 'currentUserLabel').innerText = currentUser;
+                    document.getElementById('loginSection').classList.add('hidden');
+                    document.getElementById('chatSection').classList.remove('hidden');
+                    startPolling();
+                } else {
+                    alert(data.error || 'Giriş başarısız!');
+                }
+            } catch (err) {
+                alert('Sunucu bağlantı hatası!');
             }
-        };
-
-        // ==========================================
-        // 2. VIEWMODEL KATMANI (Tüm İşlemler Burada)
-        // ==========================================
-        function useChatViewModel() {
-            const [user, setUser] = React.useState(null);
-            const [targetUser, setTargetUser] = React.useState('');
-            const [chat, setChat] = React.useState({ text: '', sender: '' });
-            const [input, setInput] = React.useState('');
-            const [error, setError] = React.useState('');
-
-            const roomId = user && targetUser ? [user, targetUser].sort().join('') : '';
-
-            const handleFetchMessages = async () => {
-                if (!roomId) {
-                    alert('Lütfen önce konuşulacak kişiyi girin!');
-                    return;
-                }
-                try {
-                    setChat({ text: '', sender: '' });
-                    const data = await ChatModel.fetchMessages(roomId);
-                    setChat(data);
-                } catch (err) {
-                    console.error('Veri çekme hatası:', err);
-                }
-            };
-
-            const handleLogin = async (e) => {
-                e.preventDefault();
-                const usernameInput = e.target.elements.username.value.trim();
-                if (!usernameInput) return;
-
-                const data = await ChatModel.login(usernameInput);
-                if (data.success) {
-                    setUser(data.user);
-                    setError('');
-                } else {
-                    setError(data.error);
-                }
-            };
-
-            const handleLogout = async () => {
-                if (user) await ChatModel.logout(user);
-                setUser(null);
-                setTargetUser('');
-                setChat({ text: '', sender: '' });
-            };
-
-            const handleSendMessage = async (e) => {
-                e.preventDefault();
-                if (!input.trim() || !targetUser) return;
-
-                const data = await ChatModel.sendMessage(user, targetUser, input);
-                if (data.success) {
-                    setInput('');
-                    alert('Mesaj gönderildi!');
-                } else {
-                    alert(data.error);
-                }
-            };
-
-            return {
-                user,
-                targetUser,
-                setTargetUser,
-                chat,
-                input,
-                setInput,
-                error,
-                handleLogin,
-                handleLogout,
-                handleSendMessage,
-                handleFetchMessages
-            };
         }
 
-        // ==========================================
-        // 3. VIEW KATMANI (Sadece Gösterim ve ViewModel Çağrısı)
-        // ==========================================
-        function App() {
-            const vm = useChatViewModel(); // İşlemleri ViewModel'den alıyoruz
-
-            if (!vm.user) {
-                return (
-                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', fontFamily: 'sans-serif' }}>
-                        <form onSubmit={vm.handleLogin} style={{ background: 'white', padding: '30px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', width: '350px', textAlign: 'center' }}>
-                            <h2 style={{ marginBottom: '20px', color: '#333' }}>Özel Sohbet Giriş</h2>
-                            <input 
-                                name="username" 
-                                placeholder="Kullanıcı Adı (max 10)" 
-                                maxLength="10" 
-                                style={{ width: '100%', padding: '10px', marginBottom: '15px', boxSizing: 'border-box', border: '1px solid #ccc', borderRadius: '4px' }} 
-                            />
-                            <button type="submit" style={{ width: '100%', padding: '10px', background: '#007bff', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
-                                Giriş Yap ve Aktifleş
-                            </button>
-                            {vm.error && <p style={{ color: 'red', marginTop: '10px', fontSize: '14px' }}>{vm.error}</p>}
-                        </form>
-                    </div>
-                );
-            }
-
-            return (
-                <div style={{ padding: '30px', fontFamily: 'sans-serif', maxWidth: '480px', margin: 'auto', background: '#fff', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', marginTop: '50px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                        <h3 style={{ margin: 0, color: '#333' }}>Kullanıcı: {vm.user}</h3>
-                        <button onClick={vm.handleLogout} style={{ padding: '5px 10px', background: '#dc3545', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Çıkış</button>
-                    </div>
-
-                    <div style={{ marginBottom: '20px' }}>
-                        <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '14px' }}>Konuşulacak Kişi:</label>
-                        <div style={{ display: 'flex', gap: '5px' }}>
-                            <input 
-                                value={vm.targetUser} 
-                                onChange={(e) => vm.setTargetUser(e.target.value)} 
-                                placeholder="Hedef kullanıcı adı..." 
-                                style={{ flex: 1, padding: '8px', boxSizing: 'border-box', border: '1px solid #ccc', borderRadius: '4px' }} 
-                            />
-                            <button onClick={vm.handleFetchMessages} style={{ padding: '8px 15px', background: '#17a2b8', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
-                                Mesajı Getir
-                            </button>
-                        </div>
-                    </div>
-
-                    <div style={{ border: '1px solid #ccc', padding: '15px', marginBottom: '15px', minHeight: '60px', background: '#f9f9f9', borderRadius: '5px' }}>
-                        <strong>Son Mesaj ({vm.chat.sender || 'Yok'}):</strong> {vm.chat.text || 'Henüz mesaj yok...'}
-                    </div>
-
-                    <form onSubmit={vm.handleSendMessage} style={{ display: 'flex', gap: '5px' }}>
-                        <input 
-                            value={vm.input} 
-                            onChange={(e) => vm.setInput(e.target.value)} 
-                            placeholder="Mesaj (max 50 karakter)..." 
-                            maxLength="50" 
-                            style={{ flex: 1, padding: '10px', border: '1px solid #ccc', borderRadius: '4px' }} 
-                        />
-                        <button type="submit" style={{ padding: '10px 20px', background: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Gönder</button>
-                    </form>
-                </div>
-            );
+        async function logout() {
+            if (!currentUser) return;
+            try {
+                await fetch('/api/user/logout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: currentUser })
+                });
+            } catch (err) {}
+            location.reload();
         }
 
-        ReactDOM.render(<App />, document.getElementById('root'));
+        async function sendMessage() {
+            const targetUser = document.getElementById('targetUserInput').value.trim();
+            const text = document.getElementById('messageInput').value.trim();
+
+            if (!targetUser || !text) {
+                alert('Hedef kullanıcı ve mesaj boş olamaz!');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/chat/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sender: currentUser, targetUser, text })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    document.getElementById('messageInput').value = '';
+                    fetchMessages();
+                } else {
+                    alert(data.error || 'Mesaj gönderilemedi!');
+                }
+            } catch (err) {
+                alert('Mesaj gönderilirken hata oluştu!');
+            }
+        }
+
+        async function fetchMessages() {
+            const targetUser = document.getElementById('targetUserInput').value.trim();
+            if (!currentUser || !targetUser) return;
+
+            const roomId = [currentUser, targetUser].sort().join('');
+            try {
+                const res = await fetch(`/api/chat/${roomId}`);
+                const data = await res.json();
+                const chatBox = document.getElementById('chatBox');
+                if (data && data.text) {
+                    chatBox.innerHTML = `<b>${data.sender}:</b> ${data.text}`;
+                } else {
+                    chatBox.innerHTML = '<i>Henüz mesaj yok...</i>';
+                }
+            } catch (err) {}
+        }
+
+        let pollInterval;
+        function startPolling() {
+            if (pollInterval) clearInterval(pollInterval);
+            pollInterval = setInterval(fetchMessages, 2000);
+        }
     </script>
 </body>
 </html>
