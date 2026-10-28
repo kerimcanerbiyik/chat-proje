@@ -16,11 +16,124 @@
 </head>
 <body>
 
+    <script>
+        // ==========================================
+        // 1. MODEL KATMANI (Veri ve Durum Depolama)
+        // ==========================================
+        const AppModel = {
+            currentUser: '',
+            pollInterval: null
+        };
+
+
+        // ==========================================
+        // 2. VIEWMODEL KATMANI (Tüm İşlemler ve API Çağrıları)
+        // ==========================================
+        const AuthViewModel = {
+            login: async () => {
+                const username = document.getElementById('usernameInput').value.trim();
+                if (!username) {
+                    alert('Lütfen kullanıcı adı girin!');
+                    return;
+                }
+
+                try {
+                    const res = await fetch('/api/user/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username })
+                    });
+                    const data = await res.json();
+                    
+                    if (!res.ok) throw new Error(data.error || 'Giriş başarısız!');
+
+                    AppModel.currentUser = data.user;
+                    
+                    document.getElementById('currentUserLabel').innerText = AppModel.currentUser;
+                    document.getElementById('loginSection').classList.add('hidden');
+                    document.getElementById('chatSection').classList.remove('hidden');
+                    
+                    ChatViewModel.startPolling();
+                } catch (err) {
+                    alert(err.message);
+                }
+            },
+
+            logout: async () => {
+                if (!AppModel.currentUser) return;
+                try {
+                    await fetch('/api/user/logout', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username: AppModel.currentUser })
+                    });
+                } catch (err) {}
+                location.reload();
+            }
+        };
+
+        const ChatViewModel = {
+            sendMessage: async () => {
+                const targetUser = document.getElementById('targetUserInput').value.trim();
+                const text = document.getElementById('messageInput').value.trim();
+
+                if (!targetUser || !text) {
+                    alert('Hedef kullanıcı ve mesaj boş olamaz!');
+                    return;
+                }
+
+                try {
+                    const res = await fetch('/api/chat/send', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ sender: AppModel.currentUser, targetUser, text })
+                    });
+                    const data = await res.json();
+                    
+                    if (!res.ok) throw new Error(data.error || 'Mesaj gönderilemedi!');
+
+                    document.getElementById('messageInput').value = '';
+                    ChatViewModel.fetchMessages();
+                } catch (err) {
+                    alert(err.message);
+                }
+            },
+
+            fetchMessages: async () => {
+                const targetUser = document.getElementById('targetUserInput').value.trim();
+                if (!AppModel.currentUser || !targetUser) return;
+
+                const roomId = [AppModel.currentUser, targetUser].sort().join('');
+                try {
+                    const res = await fetch(`/api/chat/${roomId}`);
+                    const data = await res.json();
+                    
+                    const chatBox = document.getElementById('chatBox');
+                    if (data && data.text) {
+                        chatBox.innerHTML = `<b>${data.sender}:</b> ${data.text}`;
+                    } else {
+                        chatBox.innerHTML = '<i>Henüz mesaj yok...</i>';
+                    }
+                } catch (err) {}
+            },
+
+            startPolling: () => {
+                if (AppModel.pollInterval) clearInterval(AppModel.pollInterval);
+                AppModel.pollInterval = setInterval(ChatViewModel.fetchMessages, 2000);
+            }
+        };
+    </script>
+
+
+    <!-- ========================================== -->
+    <!-- 3. VIEW KATMANI (Görünüm ve ViewModel Çağrıları) -->
+    <!-- ========================================== -->
+
     <!-- Giriş Ekranı -->
     <div id="loginSection" class="card">
         <h2>Sohbet Giriş</h2>
         <input type="text" id="usernameInput" placeholder="Kullanıcı Adı (max 10 karakter)">
-        <button onclick="login()">Giriş Yap</button>
+        <button onclick="AuthViewModel.login()">Giriş Yap</button>
     </div>
 
     <!-- Sohbet Ekranı -->
@@ -30,103 +143,9 @@
         <input type="text" id="targetUserInput" placeholder="Mesajlaşılacak Kişi">
         <div id="chatBox"><i>Henüz mesaj yok...</i></div>
         <input type="text" id="messageInput" placeholder="Mesaj yaz (max 50 karakter)">
-        <button onclick="sendMessage()">Gönder</button>
-        <button onclick="logout()" style="background: #dc3545; margin-top: 10px;">Çıkış Yap</button>
+        <button onclick="ChatViewModel.sendMessage()">Gönder</button>
+        <button onclick="AuthViewModel.logout()" style="background: #dc3545; margin-top: 10px;">Çıkış Yap</button>
     </div>
 
-    <script>
-        let currentUser = '';
-
-        async function login() {
-            const username = document.getElementById('usernameInput').value.trim();
-            if (!username) {
-                alert('Lütfen kullanıcı adı girin!');
-                return;
-            }
-
-            try {
-                const res = await fetch('/api/user/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username })
-                });
-                const data = await res.json();
-                
-                if (res.ok) {
-                    currentUser = data.user;
-                    document.getElementById('currentUserLabelinnerText' || 'currentUserLabel').innerText = currentUser;
-                    document.getElementById('loginSection').classList.add('hidden');
-                    document.getElementById('chatSection').classList.remove('hidden');
-                    startPolling();
-                } else {
-                    alert(data.error || 'Giriş başarısız!');
-                }
-            } catch (err) {
-                alert('Sunucu bağlantı hatası!');
-            }
-        }
-
-        async function logout() {
-            if (!currentUser) return;
-            try {
-                await fetch('/api/user/logout', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: currentUser })
-                });
-            } catch (err) {}
-            location.reload();
-        }
-
-        async function sendMessage() {
-            const targetUser = document.getElementById('targetUserInput').value.trim();
-            const text = document.getElementById('messageInput').value.trim();
-
-            if (!targetUser || !text) {
-                alert('Hedef kullanıcı ve mesaj boş olamaz!');
-                return;
-            }
-
-            try {
-                const res = await fetch('/api/chat/send', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ sender: currentUser, targetUser, text })
-                });
-                const data = await res.json();
-                if (res.ok) {
-                    document.getElementById('messageInput').value = '';
-                    fetchMessages();
-                } else {
-                    alert(data.error || 'Mesaj gönderilemedi!');
-                }
-            } catch (err) {
-                alert('Mesaj gönderilirken hata oluştu!');
-            }
-        }
-
-        async function fetchMessages() {
-            const targetUser = document.getElementById('targetUserInput').value.trim();
-            if (!currentUser || !targetUser) return;
-
-            const roomId = [currentUser, targetUser].sort().join('');
-            try {
-                const res = await fetch(`/api/chat/${roomId}`);
-                const data = await res.json();
-                const chatBox = document.getElementById('chatBox');
-                if (data && data.text) {
-                    chatBox.innerHTML = `<b>${data.sender}:</b> ${data.text}`;
-                } else {
-                    chatBox.innerHTML = '<i>Henüz mesaj yok...</i>';
-                }
-            } catch (err) {}
-        }
-
-        let pollInterval;
-        function startPolling() {
-            if (pollInterval) clearInterval(pollInterval);
-            pollInterval = setInterval(fetchMessages, 2000);
-        }
-    </script>
 </body>
 </html>
