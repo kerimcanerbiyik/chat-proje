@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>Özel Sohbet - Katmanlı Mimari</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body style="background: #f0f2f5; margin: 0;">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // ==========================================
+        // 1. MODEL KATMANI (API İstekleri / Veri)
+        // ==========================================
+        const ChatModel = {
+            login: async (username) => {
+                const res = await fetch('http://127.0.0.1:3000/api/user/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username })
+                });
+                return await res.json();
+            },
+            logout: async (username) => {
+                const res = await fetch('http://127.0.0.1:3000/api/user/logout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username })
+                });
+                return await res.json();
+            },
+            fetchMessages: async (roomId) => {
+                const res = await fetch(`http://127.0.0.1:3000/api/chat/${roomId}`);
+                return await res.json();
+            },
+            sendMessage: async (sender, targetUser, text) => {
+                const res = await fetch('http://127.0.0.1:3000/api/chat/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sender, targetUser, text })
+                });
+                return await res.json();
+            }
+        };
+
+        // ==========================================
+        // 2. VIEWMODEL KATMANI (Tüm İşlemler Burada)
+        // ==========================================
+        function useChatViewModel() {
+            const [user, setUser] = React.useState(null);
+            const [targetUser, setTargetUser] = React.useState('');
+            const [chat, setChat] = React.useState({ text: '', sender: '' });
+            const [input, setInput] = React.useState('');
+            const [error, setError] = React.useState('');
+
+            const roomId = user && targetUser ? [user, targetUser].sort().join('') : '';
+
+            const handleFetchMessages = async () => {
+                if (!roomId) {
+                    alert('Lütfen önce konuşulacak kişiyi girin!');
+                    return;
+                }
+                try {
+                    setChat({ text: '', sender: '' });
+                    const data = await ChatModel.fetchMessages(roomId);
+                    setChat(data);
+                } catch (err) {
+                    console.error('Veri çekme hatası:', err);
+                }
+            };
+
+            const handleLogin = async (e) => {
+                e.preventDefault();
+                const usernameInput = e.target.elements.username.value.trim();
+                if (!usernameInput) return;
+
+                const data = await ChatModel.login(usernameInput);
+                if (data.success) {
+                    setUser(data.user);
+                    setError('');
+                } else {
+                    setError(data.error);
+                }
+            };
+
+            const handleLogout = async () => {
+                if (user) await ChatModel.logout(user);
+                setUser(null);
+                setTargetUser('');
+                setChat({ text: '', sender: '' });
+            };
+
+            const handleSendMessage = async (e) => {
+                e.preventDefault();
+                if (!input.trim() || !targetUser) return;
+
+                const data = await ChatModel.sendMessage(user, targetUser, input);
+                if (data.success) {
+                    setInput('');
+                    alert('Mesaj gönderildi!');
+                } else {
+                    alert(data.error);
+                }
+            };
+
+            return {
+                user,
+                targetUser,
+                setTargetUser,
+                chat,
+                input,
+                setInput,
+                error,
+                handleLogin,
+                handleLogout,
+                handleSendMessage,
+                handleFetchMessages
+            };
+        }
+
+        // ==========================================
+        // 3. VIEW KATMANI (Sadece Gösterim ve ViewModel Çağrısı)
+        // ==========================================
+        function App() {
+            const vm = useChatViewModel(); // İşlemleri ViewModel'den alıyoruz
+
+            if (!vm.user) {
+                return (
+                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', fontFamily: 'sans-serif' }}>
+                        <form onSubmit={vm.handleLogin} style={{ background: 'white', padding: '30px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', width: '350px', textAlign: 'center' }}>
+                            <h2 style={{ marginBottom: '20px', color: '#333' }}>Özel Sohbet Giriş</h2>
+                            <input 
+                                name="username" 
+                                placeholder="Kullanıcı Adı (max 10)" 
+                                maxLength="10" 
+                                style={{ width: '100%', padding: '10px', marginBottom: '15px', boxSizing: 'border-box', border: '1px solid #ccc', borderRadius: '4px' }} 
+                            />
+                            <button type="submit" style={{ width: '100%', padding: '10px', background: '#007bff', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                                Giriş Yap ve Aktifleş
+                            </button>
+                            {vm.error && <p style={{ color: 'red', marginTop: '10px', fontSize: '14px' }}>{vm.error}</p>}
+                        </form>
+                    </div>
+                );
+            }
+
+            return (
+                <div style={{ padding: '30px', fontFamily: 'sans-serif', maxWidth: '480px', margin: 'auto', background: '#fff', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', marginTop: '50px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                        <h3 style={{ margin: 0, color: '#333' }}>Kullanıcı: {vm.user}</h3>
+                        <button onClick={vm.handleLogout} style={{ padding: '5px 10px', background: '#dc3545', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Çıkış</button>
+                    </div>
+
+                    <div style={{ marginBottom: '20px' }}>
+                        <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '14px' }}>Konuşulacak Kişi:</label>
+                        <div style={{ display: 'flex', gap: '5px' }}>
+                            <input 
+                                value={vm.targetUser} 
+                                onChange={(e) => vm.setTargetUser(e.target.value)} 
+                                placeholder="Hedef kullanıcı adı..." 
+                                style={{ flex: 1, padding: '8px', boxSizing: 'border-box', border: '1px solid #ccc', borderRadius: '4px' }} 
+                            />
+                            <button onClick={vm.handleFetchMessages} style={{ padding: '8px 15px', background: '#17a2b8', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                                Mesajı Getir
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style={{ border: '1px solid #ccc', padding: '15px', marginBottom: '15px', minHeight: '60px', background: '#f9f9f9', borderRadius: '5px' }}>
+                        <strong>Son Mesaj ({vm.chat.sender || 'Yok'}):</strong> {vm.chat.text || 'Henüz mesaj yok...'}
+                    </div>
+
+                    <form onSubmit={vm.handleSendMessage} style={{ display: 'flex', gap: '5px' }}>
+                        <input 
+                            value={vm.input} 
+                            onChange={(e) => vm.setInput(e.target.value)} 
+                            placeholder="Mesaj (max 50 karakter)..." 
+                            maxLength="50" 
+                            style={{ flex: 1, padding: '10px', border: '1px solid #ccc', borderRadius: '4px' }} 
+                        />
+                        <button type="submit" style={{ padding: '10px 20px', background: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Gönder</button>
+                    </form>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
