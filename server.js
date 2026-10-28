@@ -89,6 +89,11 @@ app.post('/api/chat/send', (req, res) => {
     } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
-app.listen(3000, '127.0.0.1', () => {
-    console.log('Sunucu 3000 portunda başarıyla çalışıyor: http://127.0.0.1:3000');
+// ==========================================
+// PORT VE HOST AYARI (Render Uyumlu)
+// ==========================================
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Sunucu ${PORT} portunda başarıyla çalışıyor.`);
 });
